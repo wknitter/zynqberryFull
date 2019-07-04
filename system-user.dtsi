@@ -1,0 +1,224 @@
+/include/ "system-conf.dtsi"
+/ {
+};
+ 
+ 
+/ {
+    #address-cells = <1>;
+    #size-cells = <1>;
+ 
+    reserved-memory {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+        hdmi_fb_reserved_region@1FC00000 {
+            compatible = "removed-dma-pool";
+            no-map;
+            // 512M (M modules)
+            reg = <0x1FC00000 0x400000>;
+            // 128M (R modules)
+            //reg = <0x7C00000 0x400000>;
+        };
+        camera_fb_reserved_region@1F800000 {
+            compatible = "removed-dma-pool";
+            no-map;
+            // 512M (M modules)
+            reg = <0x1F800000 0x400000>;
+            // 128M (R modules)
+            //reg = <0x7800000 0x400000>;
+        };
+ 
+    };
+ 
+    hdmi_fb: framebuffer@0x1FC00000 {           // HDMI out
+        compatible = "simple-framebuffer";
+        // 512M (M modules)
+        reg = <0x1FC00000 (1280 * 720 * 4)>;    // 720p
+        // 128M (R modules)
+        //reg = <0x7C00000 (1280 * 720 * 4)>;   // 720p
+        width = <1280>;                         // 720p
+        height = <720>;                         // 720p
+        stride = <(1280 * 4)>;                  // 720p
+        format = "a8b8g8r8";
+        status = "okay";
+    };
+ 
+    camera_fb: framebuffer@0x1F800000 {         // CAMERA in
+        compatible = "simple-framebuffer";
+        // 512M (M modules)
+        reg = <0x1F800000 (1280 * 720 * 4)>;    // 720p
+        // 128M (R modules)
+        //reg = <0x7800000 (1280 * 720 * 4)>;   // 720p
+        width = <1280>;                         // 720p
+        height = <720>;                         // 720p
+        stride = <(1280 * 4)>;                  // 720p
+        format = "a8b8g8r8";
+    };
+ 
+    vcc_3V3: fixedregulator@0 {
+        compatible = "regulator-fixed";
+        regulator-name = "vccaux-supply";
+        regulator-min-microvolt = <3300000>;
+        regulator-max-microvolt = <3300000>;
+        regulator-always-on;
+    };
+};
+ 
+&qspi {
+    #address-cells = <1>;
+    #size-cells = <0>;
+    status = "okay";
+    flash0: flash@0 {
+        compatible = "jedec,spi-nor";
+        reg = <0x0>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        spi-max-frequency = <50000000>;
+        partition@0x00000000 {
+            label = "boot";
+            reg = <0x00000000 0x00500000>;
+        };
+        partition@0x00500000 {
+            label = "bootenv";
+            reg = <0x00500000 0x00020000>;
+        };
+        partition@0x00520000 {
+            label = "kernel";
+            reg = <0x00520000 0x00a80000>;
+        };
+        partition@0x00fa0000 {
+            label = "spare";
+            reg = <0x00fa0000 0x00000000>;
+        };
+    };
+};
+ 
+/*
+* We need to disable Linux VDMA driver as VDMA
+* already configured in FSBL
+*/
+&video_in_axi_vdma_0 {
+   status = "disabled";
+};
+ 
+&video_out_axi_vdma_0 {
+   status = "disabled";
+};
+ 
+&video_out_v_tc_0 {
+    //xilinx-vtc: probe of 43c20000.v_tc failed with error -2
+    status = "disabled";
+};
+ 
+&gpio0 {
+    interrupt-controller;
+    #interrupt-cells = <2>;
+};
+ 
+&i2c1 {
+    #address-cells = <1>;
+    #size-cells = <0>;
+ 
+    i2cmux0: i2cmux@70  {
+        compatible = "nxp,pca9544";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x70>;
+ 
+ 
+        i2c1@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <0>;
+ 
+            id_eeprom@50 {
+                compatible = "atmel,24c32";
+                reg = <0x50>;
+            };
+ 
+        };
+        i2c1@1 {    // Display Interface Connector
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <1>;
+        };
+        i2c1@2 {    // HDMI Interface Connector
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <2>;
+        };
+        i2c1@3 {    // Camera Interface Connector
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <3>;
+        };
+    };
+ 
+};
+ 
+/{
+    usb_phy0: usb_phy@0 {
+        compatible = "ulpi-phy";
+        #phy-cells = <0>;
+        reg = <0xe0002000 0x1000>;
+        view-port = <0x0170>;
+        drv-vbus;
+    };
+};
+ 
+&usb0 {
+    usb-phy = <&usb_phy0>;
+} ;
+ 
+/*
+* Sound configuration
+*/
+ 
+/{
+    // Custom driver based on spdif-transmitter
+    te_audio: dummy_codec_te {
+        compatible = "te,te-audio";
+        #sound-dai-cells = <0>;
+    };
+ 
+    // Simple Audio Card from AXI_I2S and custom XADC audio input and
+    // PWM audio output cores
+    sound {
+        compatible = "simple-audio-card";
+        simple-audio-card,name = "TE0726-PWM-Audio";
+        simple-audio-card,format = "i2s";
+        simple-audio-card,widgets =
+            "Microphone", "In Jack",
+            "Line", "Line In Jack",
+            "Line", "Line Out Jack",
+            "Headphone", "Out Jack";
+ 
+        simple-audio-card,routing =
+            "Out Jack", "te-out",
+            "te-in", "In Jack";
+ 
+        simple-audio-card,cpu {
+            sound-dai = <&audio_axi_i2s_adi_0>;
+        };
+        simple-audio-card,codec {
+            sound-dai = <&te_audio>;
+        };
+    };
+};
+ 
+&audio_axi_i2s_adi_0 {
+    compatible = "adi,axi-i2s-1.00.a";
+    reg = <0x43c00000 0x1000>;
+    clocks = <&clkc 15>, <&clkc 18>; // FCLK_CLK0, FCLK_CLK3
+    clock-names = "axi", "ref";
+    dmas = <&dmac_s 0 &dmac_s 1>;
+    dma-names = "tx", "rx";
+    #sound-dai-cells = <0>;
+};
+ 
+/*
+* We need to disable Linux XADC driver to use XADC for audio recording
+*/
+&adc {
+    status = "disabled";
+};
